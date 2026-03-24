@@ -89,6 +89,20 @@
             overflow-y: auto;
             text-align: right;
         }
+        
+        #lesson-title-input {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 25px;
+            border: 2px solid #46178f;
+            border-radius: 8px;
+            font-size: 20px;
+            text-align: right;
+            font-weight: bold;
+            color: #333;
+            background-color: #f0f4f8;
+        }
+
         .q-block {
             background: #f9f9f9;
             padding: 20px;
@@ -219,6 +233,9 @@
     <div class="screen" id="screen-teacher-setup">
         <div class="q-builder-container">
             <h2 style="text-align: center;">📝 إعداد أسئلة التحدي</h2>
+            
+            <input type="text" id="lesson-title-input" placeholder="عنوان الدرس (مثال: الجمع والطرح)" required>
+
             <div id="questions-list"></div>
             <button class="btn btn-action" onclick="addQuestionBlock()">+ إضافة سؤال جديد</button>
             <div style="margin-top: 30px; display: flex; gap: 10px;">
@@ -276,7 +293,10 @@
                     <div class="game-over-content"><h2 id="gameOverTitle"></h2><p id="gameOverScore"></p><button id="restartBtn">إعادة تشغيل</button><button id="nextLevelBtn">المستوى التالي</button></div>
                 </div>
                 <div class="question-overlay" id="questionScreen">
-                    <div class="question-content"><h2>درس: الحل العكسي</h2><p id="questionText"></p><div id="optionsContainer"></div><p id="feedbackText"></p><div id="explanation"><h4>الشرح:</h4><p id="explanationText"></p></div></div>
+                    <div class="question-content">
+                        <h2 id="lesson-title-display">درس: تحدي الرياضيات</h2>
+                        <p id="questionText"></p><div id="optionsContainer"></div><p id="feedbackText"></p><div id="explanation"><h4>الشرح:</h4><p id="explanationText"></p></div>
+                    </div>
                 </div>
             </div>
             <div class="controls"><button id="sound-toggle">تشغيل الصوت</button><button id="resetBtn">إعادة ضبط</button></div>
@@ -313,6 +333,7 @@
         // -------------------- نظام الأسئلة --------------------
         const SHEET_ID = "1M-LkkAoNarQDN6_Hbb5ZGhs4vuD5cfhREKpZE-48_tg";
         let gameQuestions = [];
+        let gameLessonTitle = "تحدي الرياضيات"; // المتغير الجديد لعنوان الدرس
         let currentRoomPIN = "";
         let selectedAvatar = "🦁";
         const avatars = ["🦁","🦋","🤖","🥷","👨‍🔬","🐺","🦊","🐯","🐼","🐰","🐹","🐻","🦉","🫅","👸","🦸‍♂️","🚀","⭐","🔥"];
@@ -325,11 +346,23 @@
             container.insertAdjacentHTML('beforeend', html);
             qBlockCount++;
         }
-        function openTeacherSetup() { document.getElementById('questions-list').innerHTML = ''; qBlockCount=0; addQuestionBlock(); showScreen('screen-teacher-setup'); }
+        
+        function openTeacherSetup() { 
+            document.getElementById('lesson-title-input').value = ''; // تصفير عنوان الدرس
+            document.getElementById('questions-list').innerHTML = ''; 
+            qBlockCount=0; 
+            addQuestionBlock(); 
+            showScreen('screen-teacher-setup'); 
+        }
+
         function saveQuestionsToSheet() { 
+            const lessonTitle = document.getElementById('lesson-title-input').value.trim();
             const blocks = document.querySelectorAll('.q-block');
             let customQuestions = [];
             let valid = true;
+            
+            if(!lessonTitle) valid = false; // التحقق من إدخال عنوان الدرس
+
             blocks.forEach(block => {
                 const title = block.querySelector('.q-title-input').value.trim();
                 const opts = Array.from(block.querySelectorAll('.q-opt-input')).map(i=>i.value.trim());
@@ -337,12 +370,21 @@
                 if(!title || opts.some(o=>!o)) valid=false;
                 if(correct) customQuestions.push({ q: title, opts: opts, ans: parseInt(correct.value) });
             });
-            if(!valid || customQuestions.length===0) { alert("يرجى تعبئة جميع الحقول!"); return; }
+            
+            if(!valid || customQuestions.length===0) { 
+                alert("يرجى تعبئة جميع الحقول بما فيها عنوان الدرس والأسئلة!"); 
+                return; 
+            }
+            
+            // حفظ البيانات كهيكل يحوي العنوان والأسئلة معاً
+            const payload = { title: lessonTitle, questions: customQuestions };
+
             currentRoomPIN = Math.floor(100000+Math.random()*900000).toString();
             document.getElementById('qform-name').value = currentRoomPIN;
-            document.getElementById('qform-school').value = JSON.stringify(customQuestions);
+            document.getElementById('qform-school').value = JSON.stringify(payload);
             document.getElementById('questionsForm').submit();
             document.getElementById('display-room-pin').innerText = currentRoomPIN;
+            
             const url = `${window.location.href.split('?')[0]}?pin=${currentRoomPIN}`;
             document.getElementById('game-url-input').value = url;
             const qr = document.getElementById('room-qr-code');
@@ -351,11 +393,58 @@
             showScreen('screen-teacher');
             setInterval(fetchLeaderboard, 4000);
         }
+
         async function fetchLeaderboard() { try { const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`); const text = await res.text(); const json = JSON.parse(text.substring(47, text.length-2)); let players = json.table.rows.filter(r=> r.c[1]?.v.toString() === currentRoomPIN && r.c[2]?.v !== "QUESTIONS"); players.sort((a,b)=> (b.c[2]?.v||0) - (a.c[2]?.v||0)); const tbody = document.getElementById('leaderboard-body'); tbody.innerHTML = ''; players.forEach((p,i)=> tbody.innerHTML += `<tr><td>${i+1} ${i===0?'🥇':i===1?'🥈':i===2?'🥉':'🏅'}</td><td>${p.c[0].v}</td><td>${p.c[2].v}</td></tr>`); document.getElementById('loading-board').style.display = players.length ? 'none' : 'block'; document.getElementById('leaderboard').style.display = players.length ? 'table' : 'none'; } catch(e) {} }
         function copyGameLink() { const i=document.getElementById('game-url-input'); i.select(); document.execCommand('copy'); alert('تم نسخ الرابط'); }
         function goToStudentLogin() { showScreen('screen-student-login'); setupAvatars(); }
         function setupAvatars() { const container = document.getElementById('avatar-container'); container.innerHTML=''; avatars.forEach(a=>{ const div=document.createElement('div'); div.className='avatar-item'+(a===selectedAvatar?' selected':''); div.innerText=a; div.onclick=()=>{ document.querySelectorAll('.avatar-item').forEach(i=>i.classList.remove('selected')); div.classList.add('selected'); selectedAvatar=a; }; container.appendChild(div); }); }
-        async function startStudentFlow() { const name = document.getElementById('input-student-name').value.trim(); const pin = document.getElementById('input-room-pin').value.trim(); if(!name||!pin) { alert("أدخل الاسم ورقم الغرفة"); return; } try { const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`); const text = await res.text(); const json = JSON.parse(text.substring(47, text.length-2)); let found = null; for(let i=json.table.rows.length-1; i>=0; i--) { if(json.table.rows[i]?.c[0]?.v?.toString() === pin && json.table.rows[i]?.c[1]?.v?.toString().startsWith('[')) { found = JSON.parse(json.table.rows[i].c[1].v); break; } } gameQuestions = found || [ { q: "ما هي عاصمة الأردن؟", opts: ["القدس","عمان","بغداد","دمشق"], ans: 1 }, { q: "7 × 8 = ?", opts: ["48","56","64","72"], ans: 1 }, { q: "أي كوكب يسمى الكوكب الأحمر؟", opts: ["المريخ","الزهرة","المشتري","زحل"], ans: 0 } ]; document.getElementById('form-name').value = `${selectedAvatar} ${name}`; document.getElementById('form-school').value = pin; showScreen('screen-game'); initGame(); } catch(e) { gameQuestions = [ { q:"خطأ في التحميل", opts:["إعادة المحاولة"], ans:0 } ]; showScreen('screen-game'); initGame(); } }
+        
+        async function startStudentFlow() { 
+            const name = document.getElementById('input-student-name').value.trim(); 
+            const pin = document.getElementById('input-room-pin').value.trim(); 
+            if(!name||!pin) { alert("أدخل الاسم ورقم الغرفة"); return; } 
+            
+            try { 
+                const res = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`); 
+                const text = await res.text(); 
+                const json = JSON.parse(text.substring(47, text.length-2)); 
+                let found = null; 
+                
+                for(let i=json.table.rows.length-1; i>=0; i--) { 
+                    if(json.table.rows[i]?.c[0]?.v?.toString() === pin) {
+                        const cellData = json.table.rows[i]?.c[1]?.v?.toString();
+                        if (cellData.startsWith('{')) {
+                            found = JSON.parse(cellData); // الهيكل الجديد الذي يحتوي على العنوان
+                            break; 
+                        } else if (cellData.startsWith('[')) {
+                            found = { title: "تحدي بدون عنوان", questions: JSON.parse(cellData) }; // دعم الغرف القديمة المنشأة مسبقاً
+                            break;
+                        }
+                    } 
+                } 
+
+                if (found && found.questions) {
+                    gameQuestions = found.questions;
+                    gameLessonTitle = found.title;
+                } else {
+                    gameQuestions = [ { q: "ما هي عاصمة الأردن؟", opts: ["القدس","عمان","بغداد","دمشق"], ans: 1 }, { q: "7 × 8 = ?", opts: ["48","56","64","72"], ans: 1 } ];
+                    gameLessonTitle = "تحدي الرياضيات العام";
+                }
+
+                document.getElementById('lesson-title-display').innerText = "درس: " + gameLessonTitle; // عرض عنوان الدرس للطالب
+                document.getElementById('form-name').value = `${selectedAvatar} ${name}`; 
+                document.getElementById('form-school').value = pin; 
+                showScreen('screen-game'); 
+                initGame(); 
+
+            } catch(e) { 
+                gameQuestions = [ { q:"خطأ في التحميل", opts:["إعادة المحاولة"], ans:0 } ]; 
+                gameLessonTitle = "خطأ";
+                document.getElementById('lesson-title-display').innerText = gameLessonTitle;
+                showScreen('screen-game'); 
+                initGame(); 
+            } 
+        }
 
         // -------------------- لعبة Angry Birds --------------------
         let canvas, ctx, score=0, birdsLeft=0, currentLevel=1, gameRunning=true, gameObjects=[], slingshot={x:0,y:0}, currentBird=null, releasedBirds=[], input={active:false,power:0}, birdLaunchDelay=1000;
@@ -487,15 +576,11 @@
             } 
         }
         
-        // --- تحسينات المقلاع الخشبي الأنيق والرباط المطاطي ---
+        // --- المقلاع الخشبي والرباط المطاطي ---
         function drawSlingshot() {
             ctx.save();
-            
-            // إعداد الألوان الخشبية
-            const woodColor = "#8B4513"; // بني خشبي دافئ
-            const shadowColor = "#5D2E0A"; // ظل للخشب
-
-            // الشريط المطاطي الخلفي (يربط بالعمود الأيمن)
+            const woodColor = "#8B4513";
+            const shadowColor = "#5D2E0A";
             if(currentBird && !currentBird.launched){
                 ctx.beginPath(); 
                 ctx.moveTo(slingshot.x + 20, slingshot.y + 5); 
@@ -504,27 +589,16 @@
                 ctx.lineWidth = 4; 
                 ctx.stroke();
             }
-
-            // رسم العمود الأول (الأيسر) - بأبعاد أنحف
             ctx.fillStyle = woodColor;
             ctx.fillRect(slingshot.x - 4, slingshot.y, 8, 50); 
-            
-            // إضافة لمسة ظل بسيطة للعمق
             ctx.fillStyle = shadowColor;
             ctx.fillRect(slingshot.x + 2, slingshot.y, 2, 50);
-
-            // رسم العمود الثاني (الأيمن)
             ctx.fillStyle = woodColor;
             ctx.fillRect(slingshot.x + 16, slingshot.y, 8, 50);
-            
             ctx.fillStyle = shadowColor;
             ctx.fillRect(slingshot.x + 22, slingshot.y, 2, 50);
-
-            // قاعدة المقلاع (الوصلة السفلية)
             ctx.fillStyle = woodColor;
             ctx.fillRect(slingshot.x - 4, slingshot.y + 45, 28, 8);
-
-            // الشريط المطاطي الأمامي (يربط بالعمود الأيسر)
             if(currentBird && !currentBird.launched){
                 ctx.beginPath(); 
                 ctx.moveTo(slingshot.x, slingshot.y + 5); 
@@ -533,7 +607,6 @@
                 ctx.lineWidth = 6; 
                 ctx.stroke();
             }
-
             ctx.restore();
         }
         
