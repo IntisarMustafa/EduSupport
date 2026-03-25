@@ -44,7 +44,7 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            user-select: none;
+            /* تم إزالة user-select: none من هنا لإصلاح التنقل داخل الكسور في لوحة الرياضيات */
         }
 
         body {
@@ -58,6 +58,12 @@
             overflow: hidden;
             position: relative;
             font-family: 'Cairo', 'Segoe UI', sans-serif;
+            user-select: none; /* تم النقل هنا لمنع التحديد العشوائي أثناء اللعب */
+        }
+
+        /* السماح بالتحديد والكتابة بحرية داخل حقول النصوص ومحرر الرياضيات */
+        input, math-field {
+            user-select: text !important;
         }
 
         body::before {
